@@ -5,9 +5,9 @@ from setuptools import setup
 from setuptools import find_packages
 import os
 
-PACKAGE_NAME="youtube_dl_server"
-DESCRIPTION = 'server for youtube-dl'
-LONG_DESCRIPTION = "api server for youtube-dl"
+PACKAGE_NAME="youtube_dl_gui_server"
+DESCRIPTION = 'GUI server for youtube-dl'
+LONG_DESCRIPTION = "GUI server for youtube-dl"
 
 root=os.path.abspath(os.path.dirname(__file__))
 
@@ -28,7 +28,7 @@ setup(
 
 	description=DESCRIPTION,
 	long_description=LONG_DESCRIPTION,
-	url="https://github.com/kazuto28/{pkg}".format(pkg=PACKAGE_NAME),
+	url="https://github.com/kazuto28/youtube-dl-server",
 	author="Kondo Kazuto",
 	author_email="mountaindull@gmail.com",
 	license="MIT",
