@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 from flask import request, render_template, url_for, make_response, flash, send_file, redirect, Response
-import tempfile, string, random, os, json, time
+import tempfile, string, random, os, json, time, re
 from http import HTTPStatus
 from concurrent.futures import ThreadPoolExecutor
 from queue import Queue
@@ -11,6 +11,7 @@ import youtube_dl
 tmp_dir=tempfile.TemporaryDirectory()
 root=os.path.dirname(os.path.abspath(__file__))+"/"
 
+MODE=os.environ.get("MODE")
 FILE_CHARS = string.digits + string.ascii_lowercase + string.ascii_uppercase
 VIDEO_FORMATS={
     "default": "",
@@ -46,38 +47,39 @@ def gen_hook(id):
     return dl_hook
 
 class DLLogger(object):
+    def __init__(self,id):
+        self._id=id
+
     def debug(self, msg):
-        pass
+        if MODE=="DEBUG":
+            print(msg)
 
     def warning(self, msg):
         print(msg)
 
     def error(self, msg):
+        proc[self._id]["queue"].put({"status":"error","text":msg.replace("\033[0;31mERROR:\033[0m","ERROR:")})
         print(msg)
 
 def download_yt(id,queue,url,format):
     ydl_opts = {
-        'logger': DLLogger(),
+        'logger': DLLogger(id),
         'progress_hooks': [gen_hook(id)],
         'outtmpl': root+"static/files/%(title)s_%(id)s-%(format)s.%(ext)s"
     }
-    if format=="default":
-        pass
-    elif format in AUDIO_FORMATS:
+    if format in AUDIO_FORMATS:
         ydl_opts.update({'format': "bestaudio", 'postprocessors': [{'key': 'FFmpegExtractAudio','preferredcodec': format}]})
     elif format in VIDEO_FORMATS:
         ydl_opts.update({'format': VIDEO_FORMATS[format]})
     with youtube_dl.YoutubeDL(ydl_opts) as ydl:
         ydl.download(url)
-    
+    proc[id]["queue"].put({"status":"end"})
 
 def event_stream(queue,id):
     while True:
         sse_event = 'progress-item'
         data=queue.get(True)
-        if data["status"] == "finished":
-            sse_event = 'last-item'
-            time.sleep(3)
+        sse_event = data["status"]
         yield "event:{event}\ndata:{data}\n\n".format(event=sse_event, data=json.dumps(data))
 
 def prepare_response(response):
@@ -105,11 +107,10 @@ def do_add_download():
     urls=list(filter(lambda a: a!='',urls.split("\n")))
     format=request.form.get("format")
     q=Queue()
+    q.put({'status':"start"})
     id=len(proc)
-    if id<5:
-        proc.append({"thread": executor.submit(download_yt,id=id,queue=q,url=urls,format=format),"queue": q})
-        return str(id)
-    return "False"
+    proc.append({"thread": executor.submit(download_yt,id=id,queue=q,url=urls,format=format),"queue": q})
+    return str(id)
 
 def return_stream(id):
     if id<len(proc):
